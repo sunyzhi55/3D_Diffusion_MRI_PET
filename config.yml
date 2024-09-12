@@ -34,7 +34,7 @@ Dataset:
   shuffle: True
   drop_last: True
   pin_memory: True
-  num_workers: 4
+  num_workers: 0
 
 ### trainer params
 Trainer:

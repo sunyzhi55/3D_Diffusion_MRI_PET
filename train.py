@@ -19,6 +19,7 @@ def train(config):
     start_epoch = 1
 
     model = UNet(**config["Model"]).to(device)
+    # model = UNet3D(**config["Model"]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
     trainer = GaussianDiffusionTrainer(model, **config["Trainer"]).to(device)
 
