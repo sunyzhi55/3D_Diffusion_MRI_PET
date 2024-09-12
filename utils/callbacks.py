@@ -114,7 +114,7 @@ class ModelCheckpoint:
         if path.is_dir():
             if not path.exists():
                 path.mkdir(parents=True)
-            path.joinpath(f'checkpoint-{times}.pth')
+            path = path.joinpath(f'checkpoint-{times}.pth')
         torch.save(kwargs, str(path))
 
     def state_dict(self):
