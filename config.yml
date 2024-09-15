@@ -1,7 +1,7 @@
 ### model params
 Model:
-  in_channels: 3
-  out_channels: 3
+  in_channels: 1
+  out_channels: 1
   model_channels: 128
   attention_resolutions: [2, ]
   num_res_blocks: 2
@@ -12,13 +12,15 @@ Model:
 
 ### dataset params
 Dataset:
-  # Deciding which dataset to use, must be one of {'mnist', 'cifar', 'custom'}.
-  dataset: "cifar"
+  # Deciding which dataset to use, must be one of {'mnist', 'cifar', 'custom','custom3D'}.
+  dataset: "custom3D"
   # If mnist and cifar datasets, whether to use the training set.
   train: True
   # Folder of data sets. When `dataset = custom`, this parameter can be a list with different folders.
   # Then all images in the list with suffixes in `suffix` in the folder will be loaded.
-  data_path: "./data"
+  data_path: "/home/publicdata/ADNI/MRI"
+  csv_file: "/home/shenxiangyuhd/JSRL/test_pytorch/Matched_ADNI1.csv"
+  valid_group: ["AD", "CN"]
   # If mnist and cifar datasets, whether to download it.
   download: True
   # If mnist dataset, image_size is [28, 28]. If cifar dataset, image_size is [32, 32]. If custom, specify as needed.
@@ -30,7 +32,7 @@ Dataset:
   suffix: ["png", "jpg"]
 
   # parameters for torch.utils.data.DataLoader
-  batch_size: 64
+  batch_size: 1
   shuffle: True
   drop_last: True
   pin_memory: True

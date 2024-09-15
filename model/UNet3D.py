@@ -133,9 +133,9 @@ class Downsample(nn.Module):
 class UNet3D(nn.Module):
     def __init__(
             self,
-            in_channels=3,
+            in_channels=1,
             model_channels=128,
-            out_channels=3,
+            out_channels=1,
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
