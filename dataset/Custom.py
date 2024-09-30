@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Union, Iterable
 from PIL import Image
 from torchvision import datasets, transforms
-
+import yaml
 
 class ImageDataset(Dataset):
     def __init__(self, path: Union[str, Path, Iterable], suffix: Iterable[str] = ("png", "jpg"),
@@ -86,7 +86,18 @@ def create_custom_dataset_with_imagefolder(data_path, batch_size, **kwargs):
         pin_memory=kwargs.get("pin_memory", True),
         num_workers=kwargs.get("num_workers", 4),
     )
-
     # Create DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, **loader_params)
-    return dataloader
+    return len(dataset.classes), dataloader
+
+# 测试总的类别数量
+# def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
+#     if isinstance(yml_path, str):
+#         yml_path = Path(yml_path)
+#     with yml_path.open('r', encoding=encoding) as f:
+#         cfg = yaml.load(f.read(), Loader=yaml.SafeLoader)
+#         return cfg
+#
+# if __name__ =='__main__':
+#     config = load_yaml("config.yml", encoding="utf-8")
+#     print(create_custom_dataset_with_imagefolder(**config["Dataset"]))

@@ -22,4 +22,4 @@ def create_mnist_dataset(data_path, batch_size, **kwargs):
 
     dataloader = DataLoader(dataset, batch_size=batch_size, **loader_params)
 
-    return dataloader
+    return len(dataset.classes), dataloader

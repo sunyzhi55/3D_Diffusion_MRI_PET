@@ -15,16 +15,20 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, loader, optimizer, device, epoch):
+def train_one_epoch(trainer, loader, optimizer, device, epoch, use_label):
     trainer.train()
     total_loss, total_num = 0., 0
 
     with tqdm(loader, dynamic_ncols=True, colour="#ff924a") as data:
-        for images, _ in data:
+        for images, label in data:
             optimizer.zero_grad()
 
             x_0 = images.to(device)
-            loss = trainer(x_0)
+            label = label.to(device)
+            if use_label:
+                loss = trainer(x_0, label)
+            else:
+                loss = trainer(x_0)
 
             loss.backward()
             optimizer.step()

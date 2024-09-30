@@ -34,7 +34,7 @@ class TimestepBlock(nn.Module):
     """
 
     @abstractmethod
-    def forward(self, x, emb):
+    def forward(self, x, time_emb, cond_emb):
         """
         Apply the module to `x` given `emb` timestep embeddings.
         """
@@ -46,14 +46,30 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     support it as an extra input.
     """
 
-    def forward(self, x, emb):
+    def forward(self, x, time_emb,cond_emb):
         for layer in self:
             if isinstance(layer, TimestepBlock):
-                x = layer(x, emb)
+                x = layer(x, time_emb, cond_emb)
             else:
                 x = layer(x)
         return x
 
+
+# 加入条件--标签
+class ConditionalEmbedding(nn.Module):
+    def __init__(self, num_labels, d_model, dim):
+        assert d_model % 2 == 0
+        super().__init__()
+        self.condEmbedding = nn.Sequential(
+            nn.Embedding(num_embeddings=num_labels + 1, embedding_dim=d_model, padding_idx=0),
+            nn.Linear(d_model, dim),
+            nn.SiLU(),
+            nn.Linear(dim, dim),
+        )
+
+    def forward(self, labels):
+        emb = self.condEmbedding(labels)
+        return emb
 
 # use GN for norm layer
 def norm_layer(channels):
@@ -71,11 +87,15 @@ class ResidualBlock(TimestepBlock):
         )
 
         # projection for time step embedding
-        self.time_emb = nn.Sequential(
+        self.time_projection = nn.Sequential(
             nn.SiLU(),
             nn.Linear(time_channels, out_channels)
         )
-
+        # projection for condition embedding
+        self.cond_projection = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(time_channels, out_channels),
+        )
         self.conv2 = nn.Sequential(
             norm_layer(out_channels),
             nn.SiLU(),
@@ -88,14 +108,15 @@ class ResidualBlock(TimestepBlock):
         else:
             self.shortcut = nn.Identity()
 
-    def forward(self, x, t):
+    def forward(self, x, t, labels):
         """
         `x` has shape `[batch_size, in_dim, height, width]`
         `t` has shape `[batch_size, time_dim]`
         """
         h = self.conv1(x)
         # Add time step embeddings
-        h += self.time_emb(t)[:, :, None, None]
+        h += self.time_projection(t)[:, :, None, None]
+        h += self.cond_projection(labels)[:, :, None, None]
         h = self.conv2(h)
         return h + self.shortcut(x)
 
@@ -125,8 +146,8 @@ class AttentionBlock(nn.Module):
         return h + x
 
 
-# upsample
-class Upsample(nn.Module):
+# UpSample
+class UpSample(nn.Module):
     def __init__(self, channels, use_conv):
         super().__init__()
         self.use_conv = use_conv
@@ -140,8 +161,8 @@ class Upsample(nn.Module):
         return x
 
 
-# downsample
-class Downsample(nn.Module):
+# DownSample
+class DownSample(nn.Module):
     def __init__(self, channels, use_conv):
         super().__init__()
         self.use_conv = use_conv
@@ -155,9 +176,10 @@ class Downsample(nn.Module):
 
 
 # The full UNet model with attention and timestep embedding
-class UNet(nn.Module):
+class UNetCondition(nn.Module):
     def __init__(
             self,
+            num_labels,
             in_channels=3,
             model_channels=128,
             out_channels=3,
@@ -188,6 +210,7 @@ class UNet(nn.Module):
             nn.SiLU(),
             nn.Linear(time_embed_dim, time_embed_dim),
         )
+        self.cond_embedding = ConditionalEmbedding(num_labels, model_channels, time_embed_dim)
 
         # down blocks
         self.down_blocks = nn.ModuleList([
@@ -211,7 +234,7 @@ class UNet(nn.Module):
                 self.down_blocks.append(TimestepEmbedSequential(*layers))
                 down_block_chans.append(ch)
             if level != len(channel_mult) - 1:  # don't use downsample for the last stage
-                self.down_blocks.append(TimestepEmbedSequential(Downsample(ch, conv_resample)))
+                self.down_blocks.append(TimestepEmbedSequential(DownSample(ch, conv_resample)))
                 down_block_chans.append(ch)
                 ds *= 2
 
@@ -240,7 +263,7 @@ class UNet(nn.Module):
                     # print('Add the AttentionBlock')
                     layers.append(AttentionBlock(ch, num_heads=num_heads))
                 if level and i == num_res_blocks:
-                    layers.append(Upsample(ch, conv_resample))
+                    layers.append(UpSample(ch, conv_resample))
                     ds //= 2
                 self.up_blocks.append(TimestepEmbedSequential(*layers))
 
@@ -250,7 +273,7 @@ class UNet(nn.Module):
             nn.Conv2d(model_channels, out_channels, kernel_size=3, padding=1),
         )
 
-    def forward(self, x, timesteps):
+    def forward(self, x, timesteps, labels):
         """
         Apply the model to an input batch.
         :param x: an [N x C x H x W] Tensor of inputs.
@@ -259,24 +282,26 @@ class UNet(nn.Module):
         """
         hs = []
         # time step embedding
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-
+        time_embed = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        cond_embed = self.cond_embedding(labels)
         # down stage
         h = x
         for module in self.down_blocks:
-            h = module(h, emb)
+            h = module(h, time_embed, cond_embed)
             hs.append(h)
         # middle stage
-        h = self.middle_block(h, emb)
+        h = self.middle_block(h, time_embed, cond_embed)
         # up stage
         for module in self.up_blocks:
             cat_in = torch.cat([h, hs.pop()], dim=1)
-            h = module(cat_in, emb)
+            h = module(cat_in, time_embed, cond_embed)
         return self.out(h)
 
 if __name__ == '__main__':
     batch_size = 8
-    model = UNet(
+    class_num = 10
+    model = UNetCondition(
+        num_labels=class_num,
         in_channels=3,
         model_channels=128,
         out_channels=3,
@@ -288,7 +313,8 @@ if __name__ == '__main__':
         num_heads=8)  #35741699
     x = torch.randn(batch_size, 3, 32, 32)
     t = torch.randint(1000, (batch_size, ))
-    y = model(x, t)
+    labels = torch.randint(class_num, size=[batch_size])
+    y = model(x, t, labels)
     # print(model)
-    print(f"参数量：{sum(p.numel() for p in model.parameters())}")
+    print(f"参数量：{sum(p.numel() for p in model.parameters())}")  # 38632707
     print(y.shape)
